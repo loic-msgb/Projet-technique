@@ -50,7 +50,7 @@ void loop() {
       }
 
       // Ajouter les informations de la case à la chaîne de données
-      data += String(i) + "," + String(j) + "," + String(cases[i][j].etat) + ";";
+      data += String(i) + "," + String(j) + "," + String(cases[i][j].etat) + "," + String(cases[i][j].equipe) + ";";
 
       delay(2000); // Réduire la durée de la pause pour éviter un délai trop long entre les envois
     }
@@ -61,4 +61,3 @@ void loop() {
   // Effacer la chaîne de données pour la prochaine itération
   data = "";
 }
-
