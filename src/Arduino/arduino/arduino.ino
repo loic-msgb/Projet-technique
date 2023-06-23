@@ -52,12 +52,14 @@ void loop() {
       // Ajouter les informations de la case à la chaîne de données
       data += String(i) + "," + String(j) + "," + String(cases[i][j].etat) + "," + String(cases[i][j].equipe) + ";";
 
-      delay(2000); // Réduire la durée de la pause pour éviter un délai trop long entre les envois
     }
+    delay(100);
   }
 
   // Envoyer les données sérialisées via la communication série
   Serial.println(data);
   // Effacer la chaîne de données pour la prochaine itération
   data = "";
+  // Attendre 100ms avant de recommencer
+  delay(100);
 }
