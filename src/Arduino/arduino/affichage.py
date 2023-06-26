@@ -1,17 +1,14 @@
 import serial
 import tkinter as tk
+import threading
 
 # Définir les paramètres de communication série
-port = 'COM3'  # Remplacez par le port série approprié
-baudrate = 9600  # Assurez-vous que cela correspond à la vitesse série définie dans votre code Arduino
+port = 'COM3'  # Remplacer par le port série approprié
+baudrate = 9600  # Assurer que cela correspond à la vitesse série définie dans le code Arduino
 
 # Créer la fenêtre principale de l'interface graphique
 window = tk.Tk()
 window.title("MorpionGéant")
-
-# Ajouter une étiquette pour le texte de bienvenue
-welcome_label = tk.Label(window, text="Bienvenue sur notre MorpionGéant ! Amusez-vous bien", font=('Arial', 14))
-welcome_label.grid(row=0, column=0, padx=10, pady=10)
 
 # Créer une grille pour représenter le plateau de morpion
 board = [[None, None, None],
@@ -24,13 +21,13 @@ buttons = [[tk.Button(window, width=10, height=5, font=('Arial', 20, 'bold'), bg
 # Placer les boutons dans la grille
 for i in range(3):
     for j in range(3):
-        buttons[i][j].grid(row=i+1, column=j, padx=5, pady=5)
+        buttons[i][j].grid(row=i, column=j, padx=5, pady=5)
 
 # Ouvrir la connexion série
 ser = serial.Serial(port, baudrate, timeout=1)
 
-# Variable pour contrôler l'exécution du jeu
-jeuEnCours = False
+# Variable pour indiquer si le jeu est en pause
+game_paused = False
 
 # Fonction pour mettre à jour l'état des cases
 def update_case_state(data):
@@ -45,69 +42,105 @@ def update_case_state(data):
     for case_info in case_data:
         case_info_parts = case_info.split(",")
         if len(case_info_parts) == 4:
-            i, j, etat, equipe = map(int, case_info_parts)
+            i = int(case_info_parts[0])
+            j = int(case_info_parts[1])
+            etat = int(case_info_parts[2])
+            equipe = int(case_info_parts[3])
 
             # Mettre à jour l'état de la case sur le plateau de morpion
             board[i][j] = equipe
             buttons[i][j].config(text=str(equipe), state=tk.DISABLED)
-            buttons[i][j].config(bg='red' if equipe == 1 else 'blue')
+            if equipe == 1:
+                buttons[i][j].config(bg='red')
+            elif equipe == 2:
+                buttons[i][j].config(bg='blue')
 
-            # Vérifier la victoire
-            if check_victory(equipe):
-                stop_game()
+    # Vérifier si une équipe a gagné
+    winner = check_winner()
+    if winner:
+        display_winner(winner)
+        pause_game()
 
-# Fonction pour vérifier la victoire
-def check_victory(equipe):
-    # Vérifier les lignes, les colonnes et les diagonales
+# Fonction pour vérifier s'il y a un gagnant
+def check_winner():
+    # Vérifier les lignes
     for i in range(3):
-        if (board[i][0] == board[i][1] == board[i][2] == equipe) or \
-           (board[0][i] == board[1][i] == board[2][i] == equipe):
-            return True
-    if (board[0][0] == board[1][1] == board[2][2] == equipe) or \
-       (board[0][2] == board[1][1] == board[2][0] == equipe):
-        return True
-    return False
+        if board[i][0] == board[i][1] == board[i][2] != None:
+            return board[i][0]
 
-# Fonction pour arrêter le jeu
-def stop_game():
-    global jeuEnCours
-    jeuEnCours = False
-    ser.write(b'STOP\n')  # Envoyer l'instruction STOP via la communication série
+    # Vérifier les colonnes
+    for j in range(3):
+        if board[0][j] == board[1][j] == board[2][j] != None:
+            return board[0][j]
 
-# Fonction pour démarrer le jeu
-def start_game():
-    global jeuEnCours
-    jeuEnCours = True
-    ser.write(b'START\n')  # Envoyer l'instruction START via la communication série
+    # Vérifier les diagonales
+    if (board[0][0] == board[1][1] == board[2][2] != None) or (board[2][0] == board[1][1] == board[0][2] != None):
+        return board[1][1]
 
-# Créer les boutons de contrôle du jeu
-start_button = tk.Button(window, text="Démarrer le jeu", font=('Arial', 12), command=start_game)
-start_button.grid(row=4, column=0, padx=10, pady=5)
+    # Aucun gagnant
+    return None
 
-stop_button = tk.Button(window, text="Arrêter le jeu", font=('Arial', 12), command=stop_game)
-stop_button.grid(row=4, column=1, padx=10, pady=5)
+# Fonction pour afficher le message de victoire
+def display_winner(winner):
+    # Rendre les boutons transparents
+    for i in range(3):
+        for j in range(3):
+            buttons[i][j].config(state=tk.DISABLED)
+            buttons[i][j].config(bg=buttons[i][j].cget('bg'), relief=tk.SUNKEN)
+
+    # Afficher le message de victoire
+    if winner == 1:
+        message = "Victoire de l'équipe rouge !"
+    elif winner == 2:
+        message = "Victoire de l'équipe bleue !"
+    else:
+        message = "Match nul !"
+    label_winner = tk.Label(window, text=message, font=('Arial', 20, 'bold'), bg='white')
+    label_winner.grid(row=3, columnspan=3)
+
+    # Ajouter le bouton "Nouvelle partie"
+    button_new_game = tk.Button(window, text="Nouvelle partie", font=('Arial', 12, 'bold'), bg='green', fg='white', command=new_game)
+    button_new_game.grid(row=4, columnspan=3, pady=10)
+
+# Fonction pour mettre en pause le jeu
+def pause_game():
+    global game_paused
+    game_paused = True
+
+# Fonction pour relancer une nouvelle partie
+def new_game():
+    global game_paused
+    game_paused = False
+
+    # Supprimer le message de victoire et le bouton "Nouvelle partie"
+    for widget in window.grid_slaves():
+        if isinstance(widget, tk.Label) and widget.cget('text') != '':
+            widget.grid_forget()
+        if isinstance(widget, tk.Button) and widget.cget('text') == 'Nouvelle partie':
+            widget.grid_forget()
+
+    # Réinitialiser le plateau de morpion
+    for i in range(3):
+        for j in range(3):
+            board[i][j] = None
+            buttons[i][j].config(text="", state=tk.NORMAL, bg='white')
 
 # Fonction pour lire les données série et mettre à jour l'interface
 def read_serial():
     while True:
-        data = ser.readline().decode().strip()  # Lire une ligne de données série et décoder en tant que chaîne de caractères
-        if data:
-            update_case_state(data)
+        if ser.in_waiting > 0:
+            data = ser.readline().decode().strip()  # Lire une ligne de données série et décoder en tant que chaîne de caractères
+            if data and not game_paused:
+                update_case_state(data)
         window.update()
 
-# Démarrer la lecture des données série dans un thread séparé
-import threading
-thread = threading.Thread(target=read_serial, daemon=True)
-thread.start()
+# Démarrer la collecte des données en temps réel dans un thread séparé
+serial_thread = threading.Thread(target=read_serial, daemon=True)
+serial_thread.start()
 
 # Définir les options d'espacement des widgets dans la grille
 window.grid_columnconfigure(0, weight=1)
 window.grid_rowconfigure(0, weight=1)
-window.grid_rowconfigure(4, weight=1)
-
-# Définir l'espacement entre les boutons de contrôle
-window.grid_columnconfigure(0, minsize=150)
-window.grid_columnconfigure(1, minsize=150)
 
 # Démarrer la boucle principale de l'interface graphique
 window.mainloop()
